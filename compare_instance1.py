@@ -1,45 +1,16 @@
 from pprint import pprint
-from time import perf_counter
 
-from greedy_inventory import DISH_DEMAND, PARAMS, RECIPE, plain_dict, project_ingredient_demand, solve_greedy
+from benchmark_utils import benchmark, compact_plan, prepare_instance
+from greedy_inventory import solve_greedy
 from gurobi_inventory import compare_results, solve_gurobi
-
-
-def timed(callable_, *args, **kwargs):
-    start = perf_counter()
-    result = callable_(*args, **kwargs)
-    elapsed = perf_counter() - start
-    return result, elapsed
-
-
-def benchmark(callable_, args, repeats=20):
-    times = []
-    result = None
-    for _ in range(repeats):
-        result, elapsed = timed(callable_, *args)
-        times.append(elapsed)
-    return result, {
-        "repeats": repeats,
-        "min_seconds": min(times),
-        "avg_seconds": sum(times) / len(times),
-        "max_seconds": max(times),
-    }
-
-
-def compact_plan(result):
-    return {
-        "regular_purchase": plain_dict(result["regular_purchase"]),
-        "discount_purchase": plain_dict(result["discount_purchase"]),
-        "discount_enabled": plain_dict(result["discount_enabled"]),
-        "waste": plain_dict(result["waste"]),
-        "costs": result["costs"],
-    }
+from instances import get_instance
 
 
 def main():
-    ingredient_demand = project_ingredient_demand(DISH_DEMAND, RECIPE)
-    greedy_result, greedy_timing = benchmark(solve_greedy, (ingredient_demand, PARAMS))
-    gurobi_result, gurobi_timing = benchmark(solve_gurobi, (ingredient_demand, PARAMS))
+    instance = get_instance("1")
+    ingredient_demand, params, weeks = prepare_instance(instance)
+    greedy_result, greedy_timing = benchmark(solve_greedy, (ingredient_demand, params, weeks))
+    gurobi_result, gurobi_timing = benchmark(solve_gurobi, (ingredient_demand, params, weeks))
 
     comparison = compare_results(greedy_result, gurobi_result)
     comparison["greedy_timing"] = greedy_timing
@@ -50,7 +21,7 @@ def main():
         else None
     )
 
-    print("Instance 1 ingredient demand")
+    print(f"{instance['name']} ingredient demand")
     pprint(ingredient_demand, sort_dicts=False)
     print("\nGreedy compact result")
     pprint(compact_plan(greedy_result), sort_dicts=False)

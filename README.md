@@ -7,6 +7,8 @@ The original mathematical formulation is a mixed integer linear program (MILP). 
 - `greedy_inventory.py`: original greedy heuristic
 - `greedy_inventory_v2.py`: improved delay-aware heuristic
 - `gurobi_inventory.py`: exact MILP solver using Gurobi
+- `instances.py`: all instance data, separated from solver logic
+- `run_instance.py`: command-line runner that selects the instance and solver at runtime
 - `compare_instance*.py`: benchmark scripts for Instances 1-5
 - `compare_v2_summary.py`: comparison of greedy v1, greedy v2, and Gurobi
 - `results_summary.md`: original greedy vs Gurobi summary
@@ -126,17 +128,27 @@ v2 gap: 0.0016%
 
 Use Python 3.12+.
 
-To run the original greedy solver on Instance 1:
+Run a selected instance by passing the instance id and solver before execution:
 
 ```bash
-python greedy_inventory.py
+python run_instance.py --instance 1 --solver greedy
+python run_instance.py --instance 3 --solver v2
+python run_instance.py --instance 5 --solver gurobi
 ```
 
-To run the improved v2 solver on Instance 1:
+Available solver names:
 
-```bash
-python greedy_inventory_v2.py
-```
+- `greedy`
+- `v2`
+- `gurobi`
+
+Available instance ids:
+
+- `1`
+- `2`
+- `3`
+- `4`
+- `5`
 
 To run the Gurobi MILP comparison for each instance:
 
@@ -170,7 +182,10 @@ If Gurobi is unavailable, the greedy solvers can still run independently.
 
 | File | Purpose |
 |---|---|
-| `greedy_inventory.py` | Original greedy heuristic and Instance 1 data |
+| `instances.py` | Central instance registry and sensitivity scenarios |
+| `run_instance.py` | CLI runner for choosing instance and solver |
+| `benchmark_utils.py` | Shared benchmark and output helpers |
+| `greedy_inventory.py` | Original greedy heuristic |
 | `greedy_inventory_v2.py` | Improved delay-aware heuristic |
 | `gurobi_inventory.py` | Exact Gurobi MILP solver |
 | `compare_instance1.py` | Instance 1 benchmark |

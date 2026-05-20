@@ -1,5 +1,4 @@
 from collections import defaultdict
-from pprint import pprint
 
 try:
     import gurobipy as gp
@@ -9,24 +8,15 @@ except ModuleNotFoundError as exc:
     GRB = None
     GUROBI_IMPORT_ERROR = exc
 
-from greedy_inventory import (
-    DISH_DEMAND,
-    PARAMS,
-    RECIPE,
-    WEEKS,
-    plain_dict,
-    project_ingredient_demand,
-    solve_greedy,
-)
 
-
-def solve_gurobi(ingredient_demand, params, verbose=False):
+def solve_gurobi(ingredient_demand, params, weeks=None, verbose=False):
     if gp is None:
         raise RuntimeError(
             "gurobipy is not installed in this Python environment. "
             "Install gurobipy and run this file with a valid Gurobi license."
         ) from GUROBI_IMPORT_ERROR
 
+    weeks = sorted(next(iter(ingredient_demand.values()))) if weeks is None else list(weeks)
     ingredients = list(ingredient_demand)
     model = gp.Model("perishable_inventory_milp")
     model.Params.OutputFlag = 1 if verbose else 0
@@ -40,7 +30,7 @@ def solve_gurobi(ingredient_demand, params, verbose=False):
 
     for i in ingredients:
         shelf_life = params[i]["shelf_life"]
-        for t in WEEKS:
+        for t in weeks:
             regular_purchase[i, t] = model.addVar(lb=0, name=f"regular[{i},{t}]")
             discount_purchase[i, t] = model.addVar(lb=0, name=f"discount[{i},{t}]")
             discount_enabled[i, t] = model.addVar(vtype=GRB.BINARY, name=f"discount_on[{i},{t}]")
@@ -54,7 +44,7 @@ def solve_gurobi(ingredient_demand, params, verbose=False):
     for i in ingredients:
         p = params[i]
         shelf_life = p["shelf_life"]
-        for t in WEEKS:
+        for t in weeks:
             model.addConstr(
                 discount_purchase[i, t] >= p["discount_threshold"] * discount_enabled[i, t],
                 name=f"discount_min[{i},{t}]",
@@ -78,7 +68,8 @@ def solve_gurobi(ingredient_demand, params, verbose=False):
                 )
 
             for a in range(2, shelf_life):
-                previous = inventory[i, t - 1, a - 1] if t > WEEKS[0] else 0
+                previous_t = weeks[weeks.index(t) - 1] if t != weeks[0] else None
+                previous = inventory[i, previous_t, a - 1] if previous_t is not None else 0
                 model.addConstr(
                     inventory[i, t, a] == previous - use[i, t, a],
                     name=f"flow_age[{i},{t},{a}]",
@@ -92,7 +83,8 @@ def solve_gurobi(ingredient_demand, params, verbose=False):
                 )
                 model.addConstr(inventory[i, t, 1] == 0, name=f"expire_l1[{i},{t}]")
             else:
-                previous = inventory[i, t - 1, shelf_life - 1] if t > WEEKS[0] else 0
+                previous_t = weeks[weeks.index(t) - 1] if t != weeks[0] else None
+                previous = inventory[i, previous_t, shelf_life - 1] if previous_t is not None else 0
                 model.addConstr(
                     waste[i, t] == previous - use[i, t, shelf_life],
                     name=f"waste[{i},{t}]",
@@ -106,18 +98,18 @@ def solve_gurobi(ingredient_demand, params, verbose=False):
         regular_purchase[i, t] * params[i]["regular_cost"]
         + discount_purchase[i, t] * params[i]["discount_cost"]
         for i in ingredients
-        for t in WEEKS
+        for t in weeks
     )
     holding_cost = gp.quicksum(
         inventory[i, t, a] * params[i]["holding_cost"]
         for i in ingredients
-        for t in WEEKS
+        for t in weeks
         for a in range(1, params[i]["shelf_life"] + 1)
     )
     waste_cost = gp.quicksum(
         waste[i, t] * params[i]["waste_cost"]
         for i in ingredients
-        for t in WEEKS
+        for t in weeks
     )
 
     model.setObjective(purchase_cost + holding_cost + waste_cost, GRB.MINIMIZE)
@@ -143,7 +135,7 @@ def solve_gurobi(ingredient_demand, params, verbose=False):
     }
 
     for i in ingredients:
-        for t in WEEKS:
+        for t in weeks:
             regular = regular_purchase[i, t].X
             discount = discount_purchase[i, t].X
             result["regular_purchase"][i][t] = clean_number(regular)
@@ -178,19 +170,3 @@ def compare_results(greedy_result, optimal_result):
         "absolute_gap": absolute_gap,
         "relative_gap_percent": relative_gap * 100,
     }
-
-
-def main():
-    ingredient_demand = project_ingredient_demand(DISH_DEMAND, RECIPE)
-    greedy_result = solve_greedy(ingredient_demand, PARAMS)
-    gurobi_result = solve_gurobi(ingredient_demand, PARAMS)
-    comparison = compare_results(greedy_result, gurobi_result)
-
-    print("Gurobi optimal result")
-    pprint(plain_dict(gurobi_result), sort_dicts=False)
-    print("\nGreedy vs Gurobi")
-    pprint(comparison, sort_dicts=False)
-
-
-if __name__ == "__main__":
-    main()

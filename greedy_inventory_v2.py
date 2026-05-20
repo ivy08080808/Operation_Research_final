@@ -1,8 +1,7 @@
 from collections import defaultdict
 from functools import lru_cache
-from pprint import pprint
 
-from greedy_inventory import DISH_DEMAND, PARAMS, RECIPE, plain_dict, project_ingredient_demand
+from greedy_inventory import plain_dict
 
 
 def clean_number(value, tolerance=1e-7):
@@ -139,7 +138,7 @@ def solve_ingredient_v2(ingredient, weekly_demand, params):
     return plan
 
 
-def solve_greedy_v2(ingredient_demand, params):
+def solve_greedy_v2(ingredient_demand, params, weeks=None):
     result = {
         "regular_purchase": defaultdict(dict),
         "discount_purchase": defaultdict(dict),
@@ -157,6 +156,8 @@ def solve_greedy_v2(ingredient_demand, params):
     }
 
     for ingredient, weekly_demand in ingredient_demand.items():
+        if weeks is not None:
+            weekly_demand = {week: weekly_demand[week] for week in weeks}
         plan = solve_ingredient_v2(ingredient, weekly_demand, params[ingredient])
         for step in plan:
             t = step["week"]
@@ -189,14 +190,3 @@ def solve_greedy_v2(ingredient_demand, params):
         + result["costs"]["waste_cost_total"]
     )
     return result
-
-
-def main():
-    ingredient_demand = project_ingredient_demand(DISH_DEMAND, RECIPE)
-    result = solve_greedy_v2(ingredient_demand, PARAMS)
-    print("Greedy v2 result")
-    pprint(plain_dict(result), sort_dicts=False)
-
-
-if __name__ == "__main__":
-    main()

@@ -1,64 +1,10 @@
 from collections import defaultdict
-from pprint import pprint
-
-
-WEEKS = [1, 2, 3, 4]
-
-DISH_DEMAND = {
-    "D1 (Tomato-Egg)": {1: 80, 2: 90, 3: 70, 4: 100},
-    "D2 (Spinach)": {1: 60, 2: 80, 3: 90, 4: 70},
-    "D3 (Chicken)": {1: 50, 2: 60, 3: 80, 4: 90},
-}
-
-RECIPE = {
-    "D1 (Tomato-Egg)": {"Chicken Leg": 0, "Tomato": 1, "Egg": 1, "Spinach": 0},
-    "D2 (Spinach)": {"Chicken Leg": 0, "Tomato": 0, "Egg": 0, "Spinach": 2},
-    "D3 (Chicken)": {"Chicken Leg": 1, "Tomato": 0, "Egg": 0, "Spinach": 0},
-}
-
-PARAMS = {
-    "Chicken Leg": {
-        "regular_cost": 5.00,
-        "discount_cost": 4.50,
-        "discount_threshold": 120,
-        "shelf_life": 2,
-        "holding_cost": 0.300,
-        "waste_cost": 1.00,
-        "M": 170,
-    },
-    "Tomato": {
-        "regular_cost": 1.00,
-        "discount_cost": 0.85,
-        "discount_threshold": 85,
-        "shelf_life": 1,
-        "holding_cost": 0.050,
-        "waste_cost": 0.30,
-        "M": 100,
-    },
-    "Egg": {
-        "regular_cost": 0.50,
-        "discount_cost": 0.44,
-        "discount_threshold": 140,
-        "shelf_life": 2,
-        "holding_cost": 0.040,
-        "waste_cost": 0.10,
-        "M": 170,
-    },
-    "Spinach": {
-        "regular_cost": 0.80,
-        "discount_cost": 0.74,
-        "discount_threshold": 160,
-        "shelf_life": 1,
-        "holding_cost": 0.030,
-        "waste_cost": 0.20,
-        "M": 180,
-    },
-}
 
 
 def project_ingredient_demand(dish_demand, recipe):
     ingredients = sorted({i for dish in recipe.values() for i in dish})
-    projected = {i: {t: 0 for t in WEEKS} for i in ingredients}
+    weeks = sorted(next(iter(dish_demand.values())))
+    projected = {i: {t: 0 for t in weeks} for i in ingredients}
     for dish, weekly_demand in dish_demand.items():
         for t, servings in weekly_demand.items():
             for ingredient, units in recipe[dish].items():
@@ -88,7 +34,8 @@ def should_discount(quantity, weekly_need, params):
     return discount < regular
 
 
-def solve_greedy(ingredient_demand, params):
+def solve_greedy(ingredient_demand, params, weeks=None):
+    weeks = sorted(next(iter(ingredient_demand.values()))) if weeks is None else list(weeks)
     result = {
         "regular_purchase": defaultdict(dict),
         "discount_purchase": defaultdict(dict),
@@ -110,14 +57,14 @@ def solve_greedy(ingredient_demand, params):
         shelf_life = p["shelf_life"]
         inventory = {age: 0 for age in range(1, shelf_life + 1)}
 
-        for t in WEEKS:
+        for t in weeks:
             demand = weekly_demand[t]
 
             # Buy before serving this week. Discount candidates look ahead only as
             # far as the ingredient can survive.
             available_old = sum(inventory.values())
             residual_now = max(0, demand - available_old)
-            future_weeks = [week for week in WEEKS if t <= week < t + shelf_life]
+            future_weeks = [week for week in weeks if t <= week < t + shelf_life]
             uncovered_window = max(
                 0,
                 sum(weekly_demand[week] for week in future_weeks) - available_old,
@@ -180,17 +127,3 @@ def plain_dict(value):
     if isinstance(value, dict):
         return {k: plain_dict(v) for k, v in value.items()}
     return value
-
-
-def main():
-    ingredient_demand = project_ingredient_demand(DISH_DEMAND, RECIPE)
-    result = solve_greedy(ingredient_demand, PARAMS)
-
-    print("Derived ingredient demand")
-    pprint(ingredient_demand, sort_dicts=False)
-    print("\nGreedy result")
-    pprint(plain_dict(result), sort_dicts=False)
-
-
-if __name__ == "__main__":
-    main()

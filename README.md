@@ -7,6 +7,7 @@ The original mathematical formulation is a mixed integer linear program (MILP). 
 - `greedy_inventory.py`: original greedy heuristic
 - `greedy_inventory_v2.py`: improved delay-aware heuristic
 - `gurobi_inventory.py`: exact MILP solver using Gurobi
+- `excel_instance_loader.py`: loader for `instances_corrected.xlsx` / `Long_Format_Instances`
 - `instances.py`: all instance data, separated from solver logic
 - `run_instance.py`: command-line runner that selects the instance and solver at runtime
 - `compare_instance*.py`: benchmark scripts for Instances 1-5
@@ -128,27 +129,37 @@ v2 gap: 0.0016%
 
 Use Python 3.12+.
 
-Run a selected instance by passing the instance id and solver before execution:
+Run a selected Excel long-format instance by passing the workbook `Instance_ID` and solver before execution:
 
 ```bash
-python run_instance.py --instance 1 --solver greedy
-python run_instance.py --instance 3 --solver v2
-python run_instance.py --instance 5 --solver gurobi
+python run_instance.py --instance-id S1_Inst_001 --solver v2
+python run_instance.py --instance-id S1_Inst_001 --solver gurobi
+python run_instance.py --instance-id S1_Inst_001 --solver compare
 ```
 
 Available solver names:
 
-- `greedy`
 - `v2`
 - `gurobi`
+- `compare`
 
-Available instance ids:
+To list the workbook instance ids in one scenario:
 
-- `1`
-- `2`
-- `3`
-- `4`
-- `5`
+```bash
+python run_instance.py --scenario S1
+```
+
+To compare heuristic v2 and Gurobi over a scenario batch:
+
+```bash
+python run_instance.py --scenario S1 --batch --max-instances 10
+```
+
+The older built-in demo instances are still available for compatibility:
+
+```bash
+python run_instance.py --legacy-instance 1 --solver compare
+```
 
 To run the Gurobi MILP comparison for each instance:
 
@@ -183,7 +194,8 @@ If Gurobi is unavailable, the greedy solvers can still run independently.
 | File | Purpose |
 |---|---|
 | `instances.py` | Central instance registry and sensitivity scenarios |
-| `run_instance.py` | CLI runner for choosing instance and solver |
+| `excel_instance_loader.py` | Reads `Long_Format_Instances` from `instances_corrected.xlsx` |
+| `run_instance.py` | CLI runner for choosing Excel instance and solver |
 | `benchmark_utils.py` | Shared benchmark and output helpers |
 | `greedy_inventory.py` | Original greedy heuristic |
 | `greedy_inventory_v2.py` | Improved delay-aware heuristic |

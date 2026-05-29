@@ -4,6 +4,8 @@ from greedy_inventory import plain_dict, project_ingredient_demand
 
 
 def prepare_instance(instance):
+    if "ingredient_demand" in instance:
+        return instance["ingredient_demand"], instance["params"], instance.get("weeks")
     ingredient_demand = project_ingredient_demand(instance["dish_demand"], instance["recipe"])
     return ingredient_demand, instance["params"], instance.get("weeks")
 

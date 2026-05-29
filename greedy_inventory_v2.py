@@ -76,10 +76,14 @@ def action_candidates(t_index, weeks, weekly_demand, start_inventory, params):
             0,
             sum(weekly_demand[week] for week in future_weeks[:end_offset]) - available,
         )
-        for discount_qty in {threshold, needed, max(threshold, needed), min(big_m, max(threshold, needed))}:
-            if threshold <= discount_qty <= big_m:
-                regular_qty = max(0, residual_now - discount_qty)
-                actions.add((regular_qty, discount_qty))
+        for discount_qty in {
+            threshold,
+            needed,
+            max(threshold, needed),
+            min(big_m, max(threshold, needed)),
+        }:
+            if threshold <= discount_qty <= big_m and discount_qty >= residual_now:
+                actions.add((0, discount_qty))
 
     return sorted(actions)
 
@@ -92,8 +96,7 @@ def solve_ingredient_v2(ingredient, weekly_demand, params):
     @lru_cache(maxsize=None)
     def best_from(t_index, inventory_tuple):
         if t_index == len(weeks):
-            terminal_waste_cost = sum(inventory_tuple) * params["waste_cost"]
-            return terminal_waste_cost, []
+            return 0, []
 
         start_inventory = {
             age: inventory_tuple[age - 1]

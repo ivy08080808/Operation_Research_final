@@ -9,7 +9,7 @@ except ModuleNotFoundError as exc:
     GUROBI_IMPORT_ERROR = exc
 
 
-def solve_gurobi(ingredient_demand, params, weeks=None, verbose=False):
+def solve_gurobi(ingredient_demand, params, weeks=None, verbose=False, mip_gap=1e-9):
     if gp is None:
         raise RuntimeError(
             "gurobipy is not installed in this Python environment. "
@@ -20,6 +20,7 @@ def solve_gurobi(ingredient_demand, params, weeks=None, verbose=False):
     ingredients = list(ingredient_demand)
     model = gp.Model("perishable_inventory_milp")
     model.Params.OutputFlag = 1 if verbose else 0
+    model.Params.MIPGap = mip_gap
 
     regular_purchase = {}
     discount_purchase = {}
@@ -45,6 +46,10 @@ def solve_gurobi(ingredient_demand, params, weeks=None, verbose=False):
         p = params[i]
         shelf_life = p["shelf_life"]
         for t in weeks:
+            model.addConstr(
+                regular_purchase[i, t] <= p["M"] * (1 - discount_enabled[i, t]),
+                name=f"regular_max[{i},{t}]",
+            )
             model.addConstr(
                 discount_purchase[i, t] >= p["discount_threshold"] * discount_enabled[i, t],
                 name=f"discount_min[{i},{t}]",

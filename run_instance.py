@@ -4,6 +4,7 @@ from pprint import pprint
 from benchmark_utils import benchmark, compact_plan, prepare_instance
 from excel_instance_loader import DEFAULT_SHEET, DEFAULT_WORKBOOK, list_instance_ids, load_excel_instance
 from greedy_inventory_v2 import solve_greedy_v2
+from heuristic_baseline import solve_heuristic_baseline
 from gurobi_inventory import compare_results, solve_gurobi
 from instances import INSTANCES, get_instance
 
@@ -33,7 +34,7 @@ def parse_args():
     )
     parser.add_argument(
         "--solver",
-        choices=["v2", "gurobi", "compare"],
+        choices=["baseline", "v2", "gurobi", "compare"],
         default="compare",
         help="Solver mode. compare runs heuristic v2 and Gurobi and reports the gap.",
     )
@@ -151,6 +152,15 @@ def main():
         print("\nHeuristic v2 result")
         pprint(compact_plan(result, include_inventory=args.show_inventory), sort_dicts=False)
         print_timing("\nHeuristic v2", timing)
+        return
+
+    if args.solver == "baseline":
+        result, timing = solve_with_timing(
+            solve_heuristic_baseline, ingredient_demand, params, weeks, args.repeats
+        )
+        print("\nHeuristic baseline result")
+        pprint(compact_plan(result, include_inventory=args.show_inventory), sort_dicts=False)
+        print_timing("\nHeuristic baseline", timing)
         return
 
     if args.solver == "gurobi":

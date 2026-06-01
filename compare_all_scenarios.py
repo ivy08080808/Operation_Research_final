@@ -7,6 +7,7 @@ from time import perf_counter
 from benchmark_utils import prepare_instance
 from excel_instance_loader import DEFAULT_SHEET, DEFAULT_WORKBOOK, load_excel_instances
 from greedy_inventory_v2 import solve_greedy_v2
+from heuristic_baseline import solve_heuristic_baseline
 from gurobi_inventory import compare_results, solve_gurobi
 
 
@@ -41,11 +42,18 @@ def timed_solve(solver, ingredient_demand, params, weeks):
 
 def evaluate_instance(instance):
     ingredient_demand, params, weeks = prepare_instance(instance)
+    baseline_result, baseline_seconds = timed_solve(
+        solve_heuristic_baseline, ingredient_demand, params, weeks
+    )
     heuristic_result, heuristic_seconds = timed_solve(
         solve_greedy_v2, ingredient_demand, params, weeks
     )
     gurobi_result, gurobi_seconds = timed_solve(solve_gurobi, ingredient_demand, params, weeks)
+    baseline_comparison = compare_results(baseline_result, gurobi_result)
     comparison = compare_results(heuristic_result, gurobi_result)
+    if abs(baseline_comparison["absolute_gap"]) < 1e-6:
+        baseline_comparison["absolute_gap"] = 0.0
+        baseline_comparison["relative_gap_percent"] = 0.0
     if abs(comparison["absolute_gap"]) < 1e-6:
         comparison["absolute_gap"] = 0.0
         comparison["relative_gap_percent"] = 0.0
@@ -55,10 +63,14 @@ def evaluate_instance(instance):
         "scenario_name": instance["scenario_name"],
         "instance_id": instance["instance_id"],
         "num_ingredients": len(ingredient_demand),
+        "baseline_cost": baseline_comparison["greedy_total_cost"],
+        "baseline_gap": baseline_comparison["absolute_gap"],
+        "baseline_gap_percent": baseline_comparison["relative_gap_percent"],
         "heuristic_cost": comparison["greedy_total_cost"],
         "gurobi_cost": comparison["gurobi_total_cost"],
         "absolute_gap": comparison["absolute_gap"],
         "relative_gap_percent": comparison["relative_gap_percent"],
+        "baseline_seconds": baseline_seconds,
         "heuristic_seconds": heuristic_seconds,
         "gurobi_seconds": gurobi_seconds,
     }

@@ -1,6 +1,23 @@
 from time import perf_counter
 
-from greedy_inventory import plain_dict, project_ingredient_demand
+def plain_dict(value):
+    if isinstance(value, dict):
+        return {k: plain_dict(v) for k, v in value.items()}
+    return value
+
+
+def project_ingredient_demand(dish_demand, recipe):
+    ingredient_demand = {}
+    weeks = sorted(next(iter(dish_demand.values())))
+    ingredients = sorted({ingredient for dish in recipe.values() for ingredient in dish})
+    for ingredient in ingredients:
+        ingredient_demand[ingredient] = {}
+        for week in weeks:
+            ingredient_demand[ingredient][week] = sum(
+                dish_demand[dish].get(week, 0) * recipe[dish].get(ingredient, 0)
+                for dish in dish_demand
+            )
+    return ingredient_demand
 
 
 def prepare_instance(instance):

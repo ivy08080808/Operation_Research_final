@@ -9,7 +9,14 @@ except ModuleNotFoundError as exc:
     GUROBI_IMPORT_ERROR = exc
 
 
-def solve_gurobi(ingredient_demand, params, weeks=None, verbose=False, mip_gap=1e-9):
+def solve_gurobi(
+    ingredient_demand,
+    params,
+    weeks=None,
+    verbose=False,
+    mip_gap=1e-9,
+    category_capacities=None,
+):
     if gp is None:
         raise RuntimeError(
             "gurobipy is not installed in this Python environment. "
@@ -18,6 +25,16 @@ def solve_gurobi(ingredient_demand, params, weeks=None, verbose=False, mip_gap=1
 
     weeks = sorted(next(iter(ingredient_demand.values()))) if weeks is None else list(weeks)
     ingredients = list(ingredient_demand)
+    category_capacities = infer_category_capacities(params, category_capacities)
+    categories = sorted(category_capacities)
+    ingredients_by_category = {
+        category: [
+            ingredient
+            for ingredient in ingredients
+            if str(params[ingredient].get("category_id")) == category
+        ]
+        for category in categories
+    }
     model = gp.Model("perishable_inventory_milp")
     model.Params.OutputFlag = 1 if verbose else 0
     model.Params.MIPGap = mip_gap
@@ -99,6 +116,24 @@ def solve_gurobi(ingredient_demand, params, weeks=None, verbose=False, mip_gap=1
                     name=f"expire[{i},{t}]",
                 )
 
+    for category in categories:
+        for t in weeks:
+            previous_t = weeks[weeks.index(t) - 1] if t != weeks[0] else None
+            carried_inventory = gp.quicksum(
+                inventory[i, previous_t, a]
+                for i in ingredients_by_category[category]
+                for a in range(1, params[i]["shelf_life"] + 1)
+                if previous_t is not None
+            )
+            new_purchase = gp.quicksum(
+                regular_purchase[i, t] + discount_purchase[i, t]
+                for i in ingredients_by_category[category]
+            )
+            model.addConstr(
+                carried_inventory + new_purchase <= category_capacities[category],
+                name=f"category_capacity[{category},{t}]",
+            )
+
     purchase_cost = gp.quicksum(
         regular_purchase[i, t] * params[i]["regular_cost"]
         + discount_purchase[i, t] * params[i]["discount_cost"]
@@ -175,3 +210,16 @@ def compare_results(greedy_result, optimal_result):
         "absolute_gap": absolute_gap,
         "relative_gap_percent": relative_gap * 100,
     }
+
+
+def infer_category_capacities(params, category_capacities):
+    if category_capacities is not None:
+        return {str(category): float(capacity) for category, capacity in category_capacities.items()}
+
+    inferred = {}
+    for ingredient_params in params.values():
+        category = ingredient_params.get("category_id")
+        capacity = ingredient_params.get("category_capacity")
+        if category is not None and capacity is not None:
+            inferred[str(category)] = float(capacity)
+    return inferred

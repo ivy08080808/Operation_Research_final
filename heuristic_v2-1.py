@@ -299,5 +299,3 @@ def infer_category_capacities(params, category_capacities):
         if category is not None and capacity is not None:
             inferred[str(category)] = float(capacity)
     return inferred
-
-

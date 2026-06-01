@@ -199,15 +199,273 @@ def solve_greedy_v2(ingredient_demand, params, weeks=None, category_capacities=N
             category_ingredients = [
                 ingredient
                 for ingredient in ingredient_demand
-                if str(params[ingredient].get("category_id")) == category
-            ]
-            category_ingredients = sorted(
-                category_ingredients,
-                key=lambda ingredient: (
-                    params[ingredient]["shelf_life"],
+                if str(params[ingredient].get("from collections import defaultdict
+from functools import lru_cache
+
+
+def clean_number(value, tolerance=1e-7):
+    if abs(value) < tolerance:
+        return 0
+    rounded = round(value)
+    if abs(value - rounded) < tolerance:
+        return int(rounded)
+    return value
+
+
+def simulate_week(start_inventory, demand, regular_qty, discount_qty, params):
+    shelf_life = params["shelf_life"]
+
+    inventory = dict(start_inventory)
+    inventory[1] += regular_qty + discount_qty
+
+    use = {}
+    remaining_demand = demand
+
+    for age in range(shelf_life, 0, -1):
+        used = min(inventory[age], remaining_demand)
+        inventory[age] -= used
+        remaining_demand -= used
+        use[age] = used
+
+    if remaining_demand:
+        return None
+
+    waste = inventory[shelf_life]
+    inventory[shelf_life] = 0
+
+    holding_cost = sum(inventory.values()) * params["holding_cost"]
+    waste_cost = waste * params["waste_cost"]
+
+    purchase_cost = (
+        regular_qty * params["regular_cost"]
+        + discount_qty * params["discount_cost"]
+    )
+
+    next_inventory = {
+        age + 1: inventory[age]
+        for age in range(1, shelf_life)
+    }
+    next_inventory[1] = 0
+
+    return {
+        "use": use,
+        "waste": waste,
+        "end_inventory": dict(inventory),
+        "next_inventory": next_inventory,
+        "purchase_cost": purchase_cost,
+        "holding_cost": holding_cost,
+        "waste_cost": waste_cost,
+        "total_cost": purchase_cost + holding_cost + waste_cost,
+    }
+
+
+def action_candidates(t_index, weeks, weekly_demand, start_inventory, params, capacity_limit=None):
+    t = weeks[t_index]
+    shelf_life = params["shelf_life"]
+    threshold = params["discount_threshold"]
+    big_m = params["M"]
+
+    demand_now = weekly_demand[t]
+    available = sum(start_inventory.values())
+    residual_now = max(0, demand_now - available)
+
+    actions = {(residual_now, 0)}
+
+    if threshold > big_m:
+        return sorted(actions)
+
+    future_weeks = weeks[t_index: t_index + shelf_life]
+
+    for end_offset in range(1, len(future_weeks) + 1):
+        needed = max(
+            0,
+            sum(weekly_demand[w] for w in future_weeks[:end_offset]) - available,
+        )
+
+        for discount_qty in {
+            threshold,
+            needed,
+            max(threshold, needed),
+            min(big_m, max(threshold, needed)),
+        }:
+            if threshold <= discount_qty <= big_m and discount_qty >= residual_now:
+                actions.add((0, discount_qty))
+
+    if capacity_limit is None:
+        return sorted(actions)
+
+    cap = capacity_limit - sum(start_inventory.values())
+
+    return sorted(
+        (r, d)
+        for r, d in actions
+        if r + d <= cap + 1e-7
+    )
+
+
+def solve_ingredient_v2(ingredient, weekly_demand, params, capacity_remaining=None):
+    weeks = sorted(weekly_demand)
+    shelf_life = params["shelf_life"]
+
+    zero_inventory = tuple(0 for _ in range(shelf_life))
+
+    @lru_cache(maxsize=None)
+    def best_from(t_index, inventory_tuple):
+        if t_index == len(weeks):
+            return 0, []
+
+        start_inventory = {
+            age: inventory_tuple[age - 1]
+            for age in range(1, shelf_life + 1)
+        }
+
+        week = weeks[t_index]
+
+        cap = None
+        if capacity_remaining is not None:
+            cap = capacity_remaining.get(week)
+
+        best_cost = float("inf")
+        best_plan = None
+
+        for r, d in action_candidates(
+            t_index, weeks, weekly_demand, start_inventory, params, cap
+        ):
+            sim = simulate_week(
+                start_inventory,
+                weekly_demand[week],
+                r,
+                d,
+                params,
+            )
+
+            if sim is None:
+                continue
+
+            nxt = tuple(sim["next_inventory"][a] for a in range(1, shelf_life + 1))
+
+            future_cost, future_plan = best_from(t_index + 1, nxt)
+
+            total = sim["total_cost"] + future_cost
+
+            if total < best_cost:
+                best_cost = total
+                best_plan = [
+                    {
+                        "week": week,
+                        "regular_qty": r,
+                        "discount_qty": d,
+                        "simulated": sim,
+                    }
+                ] + future_plan
+
+        return best_cost, best_plan
+
+    _, plan = best_from(0, zero_inventory)
+
+    if plan is None:
+        raise ValueError(f"No feasible plan for {ingredient}")
+
+    return plan
+
+
+def infer_category_capacities(params, category_capacities):
+    if category_capacities is not None:
+        return {str(k): float(v) for k, v in category_capacities.items()}
+
+    inferred = {}
+
+    for p in params.values():
+        if p.get("category_id") is not None and p.get("category_capacity") is not None:
+            inferred[str(p["category_id"])] = float(p["category_capacity"])
+
+    return inferred
+
+
+def solve_greedy_v2(ingredient_demand, params, weeks=None, category_capacities=None):
+    weeks = sorted(next(iter(ingredient_demand.values()))) if weeks is None else list(weeks)
+
+    result = {
+        "regular_purchase": defaultdict(dict),
+        "discount_purchase": defaultdict(dict),
+        "discount_enabled": defaultdict(dict),
+        "purchase": defaultdict(dict),
+        "inventory": defaultdict(lambda: defaultdict(dict)),
+        "use": defaultdict(lambda: defaultdict(lambda: defaultdict(float))),
+        "waste": defaultdict(dict),
+        "costs": {
+            "purchase_cost": 0,
+            "holding_cost_total": 0,
+            "waste_cost_total": 0,
+            "total_cost": 0,
+        },
+    }
+
+    category_capacities = infer_category_capacities(params, category_capacities)
+
+    if category_capacities:
+        category_remaining = {
+            c: {w: category_capacities[c] for w in weeks}
+            for c in category_capacities
+        }
+    else:
+        category_remaining = None
+
+    for ingredient, weekly_demand in ingredient_demand.items():
+
+        cap = None
+        category = str(params[ingredient].get("category_id"))
+
+        if category_remaining is not None and category in category_remaining:
+            cap = category_remaining[category]
+
+        plan = solve_ingredient_v2(
+            ingredient,
+            {w: weekly_demand[w] for w in weeks},
+            params[ingredient],
+            cap,
+        )
+
+        for step in plan:
+            t = step["week"]
+            sim = step["simulated"]
+
+            r = step["regular_qty"]
+            d = step["discount_qty"]
+
+            result["regular_purchase"][ingredient][t] = clean_number(r)
+            result["discount_purchase"][ingredient][t] = clean_number(d)
+            result["discount_enabled"][ingredient][t] = int(d > 0)
+            result["purchase"][ingredient][t] = clean_number(r + d)
+            result["waste"][ingredient][t] = clean_number(sim["waste"])
+
+            for a, v in sim["use"].items():
+                result["use"][ingredient][t][a] = clean_number(v)
+
+            for a, v in sim["end_inventory"].items():
+                result["inventory"][ingredient][t][a] = clean_number(v)
+
+            result["costs"]["purchase_cost"] += sim["purchase_cost"]
+            result["costs"]["holding_cost_total"] += sim["holding_cost"]
+            result["costs"]["waste_cost_total"] += sim["waste_cost"]
+
+            if category_remaining is not None and category in category_remaining:
+                category_remaining[category][t] -= sim.get("capacity_used", 0)
+
+                if category_remaining[category][t] < -1e-7:
+                    raise ValueError("Category capacity exceeded")
+
+    result["costs"]["total_cost"] = (
+        result["costs"]["purchase_cost"]
+        + result["costs"]["holding_cost_total"]
+        + result["costs"]["waste_cost_total"]
+    )
+
+    return result
                     -sum(ingredient_demand[ingredient][week] for week in weeks),
                     ingredient,
                 ),
+
             )
             for position, ingredient in enumerate(category_ingredients):
                 ordered_ingredients.append(
@@ -301,3 +559,15 @@ def infer_category_capacities(params, category_capacities):
     return inferred
 
 
+# Utility: deterministic ingredient ordering by category, perishability, and demand.
+def category_ordered_ingredients(ingredient_demand, params, weeks):
+    def sort_key(ingredient):
+        p = params[ingredient]
+        return (
+            str(p.get("category_id")),
+            p["shelf_life"],
+            -sum(ingredient_demand[ingredient][week] for week in weeks),
+            ingredient,
+        )
+
+    return sorted(ingredient_demand, key=sort_key)

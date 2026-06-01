@@ -204,7 +204,7 @@ def solve_greedy_v2(ingredient_demand, params, weeks=None, category_capacities=N
             category_ingredients = sorted(
                 category_ingredients,
                 key=lambda ingredient: (
-                    params[ingredient]["shelf_life"],
+                    -params[ingredient]["shelf_life"],
                     -sum(ingredient_demand[ingredient][week] for week in weeks),
                     ingredient,
                 ),
@@ -299,5 +299,3 @@ def infer_category_capacities(params, category_capacities):
         if category is not None and capacity is not None:
             inferred[str(category)] = float(capacity)
     return inferred
-
-

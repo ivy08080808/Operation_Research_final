@@ -24,14 +24,18 @@ def infer_category_capacities(params, category_capacities):
 
 
 def solve_heuristic_baseline(ingredient_demand, params, weeks=None, category_capacities=None):
-    """
-    Simplest heuristic baseline:
-    - Do not pre-buy.
-    - Do not use discount.
-    - In each week, buy exactly enough to satisfy that week's demand.
+    """Baseline heuristic v2-1.
+
+    This version intentionally ignores discount opportunities and carryover.
+    It buys exactly each week's ingredient demand at regular price, consumes it
+    immediately, and leaves no inventory or waste.
     """
     weeks = sorted(next(iter(ingredient_demand.values()))) if weeks is None else list(weeks)
     category_capacities = infer_category_capacities(params, category_capacities)
+    category_usage = {
+        category: {week: 0.0 for week in weeks}
+        for category in category_capacities
+    }
 
     result = {
         "regular_purchase": defaultdict(dict),
@@ -49,31 +53,36 @@ def solve_heuristic_baseline(ingredient_demand, params, weeks=None, category_cap
         },
     }
 
-    for ingredient, weekly in ingredient_demand.items():
+    for ingredient, weekly_demand in ingredient_demand.items():
         shelf_life = params[ingredient]["shelf_life"]
         category = str(params[ingredient].get("category_id"))
 
-        for t in weeks:
-            demand = float(weekly[t])
-            regular_qty = max(0.0, demand)
+        for week in weeks:
+            regular_qty = float(weekly_demand[week])
             discount_qty = 0.0
 
-            result["regular_purchase"][ingredient][t] = clean_number(regular_qty)
-            result["discount_purchase"][ingredient][t] = 0
-            result["discount_enabled"][ingredient][t] = 0
-            result["purchase"][ingredient][t] = clean_number(regular_qty)
-            result["waste"][ingredient][t] = 0
+            if category in category_usage:
+                category_usage[category][week] += regular_qty
+                if category_usage[category][week] > category_capacities[category] + 1e-7:
+                    raise ValueError(
+                        f"Category capacity exceeded for category {category}, week {week}"
+                    )
+
+            result["regular_purchase"][ingredient][week] = clean_number(regular_qty)
+            result["discount_purchase"][ingredient][week] = 0
+            result["discount_enabled"][ingredient][week] = 0
+            result["purchase"][ingredient][week] = clean_number(regular_qty)
+            result["waste"][ingredient][week] = 0
 
             for age in range(1, shelf_life + 1):
-                result["inventory"][ingredient][t][age] = 0
-                result["use"][ingredient][t][age] = clean_number(regular_qty if age == 1 else 0)
-
-            result["costs"]["purchase_cost"] += regular_qty * params[ingredient]["regular_cost"]
-
-            if category in category_capacities and regular_qty > category_capacities[category] + 1e-7:
-                raise ValueError(
-                    f"Category capacity exceeded for category {category}, week {t}"
+                result["inventory"][ingredient][week][age] = 0
+                result["use"][ingredient][week][age] = clean_number(
+                    regular_qty if age == 1 else 0
                 )
+
+            result["costs"]["purchase_cost"] += (
+                regular_qty * params[ingredient]["regular_cost"]
+            )
 
     result["costs"] = {
         key: clean_number(value)

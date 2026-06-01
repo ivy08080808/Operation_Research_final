@@ -6,7 +6,7 @@ from time import perf_counter
 
 from benchmark_utils import prepare_instance
 from excel_instance_loader import DEFAULT_SHEET, DEFAULT_WORKBOOK, load_excel_instances
-from greedy_inventory_v2 import solve_greedy_v2
+from heuristic_v2 import solve_greedy_v2
 from heuristic_baseline import solve_heuristic_baseline
 from gurobi_inventory import compare_results, solve_gurobi
 
